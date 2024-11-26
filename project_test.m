@@ -7,7 +7,9 @@ gdfFiles = gdfFiles(:);
 
 curr_session = session;
 curr_session.Date = "11-24-2024"
-curr_session.Year = 2024
+curr_session.Year = 2023
+
+stuff = 1;
 
 
 %% TODO LIST
