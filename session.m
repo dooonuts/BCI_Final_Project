@@ -9,9 +9,17 @@ classdef session
         Type % MI vs ME vs EOG
         Online % Online vs Offline
         Filename % Filename
-        Spectrum % Spectrum
-        Famp % Frequencies
-        PEData % PEData
+        % Spectrum % Spectrum
+        % Famp % Frequencies
+        % PEData % PEData
+        PE_MI % Processed MI Data
+        MI_Tags % MI Tags
+        PE_MI_Spectrum % Processed MI Spectrum
+        PE_MI_Famp % Processed MI Frequency Amplitude
+        PE_Rest % Processed Rest Data
+        Rest_Tags % Rest Tags
+        PE_Rest_Spectrum % Processed Rest Spectrum
+        PE_Rest_Famp % Processed Rest Frequency Amplitude
     end
     
     methods
@@ -28,10 +36,10 @@ classdef session
                 obj.Filename = filename;
             end
         end
-        function obj = Store(obj, pe_data, pe_spectrum, pe_famp)
-            obj.Spectrum = pe_spectrum;
-            obj.PEData = pe_data;
-            obj.Famp = pe_famp;
-        end
+        % function obj = Store(obj, pe_data, pe_spectrum, pe_famp)
+        %     obj.Spectrum = pe_spectrum;
+        %     obj.PEData = pe_data;
+        %     obj.Famp = pe_famp;
+        % end
     end
 end

@@ -17,20 +17,30 @@ MI_sessions = {};
 for i=1:num_sessions
     if (convertCharsToStrings(all_sessions{i}.Type) == "MI")
         curr_session = all_sessions{i};
-        [curr_data, curr_spectrum, curr_famp] = preprocess_session(curr_session.Filename);
-        curr_session.PEData = curr_data;
-        curr_session.Spectrum = curr_spectrum;
-        curr_session.Famp = curr_famp;
+        [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_session(curr_session.Filename);
+        curr_session.PE_MI = pe_mi;
+        curr_session.PE_MI_Spectrum = pe_mi_spectrum;
+        curr_session.PE_MI_Famp = pe_mi_famp;
+        curr_session.MI_Tags = mi_tags;
+
+        curr_session.PE_Rest = pe_rest;
+        curr_session.Rest_Tags = rest_tags;
+        curr_session.PE_Rest_Spectrum = pe_rest_spectrum;
+        curr_session.PE_Rest_Famp = pe_rest_famp;
         MI_sessions{end+1} = curr_session;
     end
 end
-
-% [curr_data, curr_spectrum, curr_famp] = preprocess_session(MI_sessions{1}.Filename);
+%% Testing 
+first_trial = curr_session.PE_MI{1};
+first_trial_spectrum = curr_session.PE_MI_Spectrum;
+first_trial_famp = curr_session.PE_MI_Famp;
+figure(1); clf;
+plot(first_trial);
+figure(2); clf;
+plot(first_trial_spectrum{1},first_trial_famp{1});
 
 %% TODO LIST
-% Finish Session Variable
 % Finish PCA
-% Signal Cropping
 % Create Model and Test
 % Linear Discriminant Analysis/Linear Regression
 % What happens if we train with first only session of top of that?
@@ -49,24 +59,43 @@ end
 
 %% Model 
 
-
 % Preprocess Each Session and Return, 
-function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_session(curr_session_file)
+function [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_session(curr_session_file)
 
     [s,h] = sload(curr_session_file);
     
+    % Certain channels are unused:
+    s = s(:,1:34);
+
+    [restMatrix,rest_tags,miMatrix,mi_tags] = crop_sort_signals(s,h);
+
+    [~, num_rest_trials] = size(restMatrix);
+    [~, num_mi_trials] = size(miMatrix);
+    pe_rest = {};
+    pe_rest_spectrum = {};
+    pe_rest_famp = {};
+   
+    pe_mi = {};
+    pe_mi_spectrum = {};
+    pe_mi_famp = {};
+    for i=1:num_rest_trials
+        [pe_rest{i},pe_rest_spectrum{i},pe_rest_famp{i}] = preprocess_trial(restMatrix{i});
+    end
+    for i=1:num_mi_trials
+        [pe_mi{i},pe_mi_spectrum{i},pe_mi_famp{i}] = preprocess_trial(miMatrix{i});
+    end
+    
+end
+
+function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial)
     Fs = 256; %                         [Hz] Sampling Frequency
     cutoffHigh = 8; %                   [Hz] High pass component
     cutoffLow = 12; %                   [Hz] Low pass component
-    
-    % Certain channels are unused:
-    s = s(:,1:34);
-    
-    % Make and use band pass filter
-    [B,A] = butter(5,[cutoffHigh/Fs,cutoffLow/Fs]);
-    dataTempFilt = filtfilt(B,A,s);
 
-    % TODO: Add Crop in Time Domain
+    % % Make and use band pass filter
+    [B,A] = butter(5,[cutoffHigh/(Fs/2),cutoffLow/(Fs/2)]);
+    dataTempFilt = filtfilt(B,A,curr_trial);
+    % dataTempFilt = bandpass(curr_trial, [cutoffHigh cutoffLow], Fs);
 
     % Split the EOG and EEG Data
     EOG = dataTempFilt(:,end-1:end);
@@ -81,8 +110,7 @@ function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_session(curr_ses
 
     % Frequency Transform
     [pe_spectrum, pe_freq_amplitude] = fft_with_shift(dataTempFilt, Fs, 1);
-    pe_spectrum = pe_spectrum';
-    
+    % pe_spectrum = pe_spectrum';
 end
 
 % Spatial Filtering for EEG
@@ -103,7 +131,6 @@ function [freqs, reconstructed_signal] = ifft_with_shift(fft_data, sr)
     reconstructed_signal = ifft(ifftshift(fft_data)); 
     freqs = 0;
 end
-
 
 function [all_sessions] = create_classes(gdfFiles) 
     [num_files,temp]=size(gdfFiles);

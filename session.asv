@@ -9,24 +9,31 @@ classdef session
         Type % MI vs ME vs EOG
         Online % Online vs Offline
         Filename % Filename
+        % Spectrum % Spectrum
+        % Famp % Frequencies
+        % PEData % PEData
+        PE_MI % 
+        PE_Rest % Processed Rest D
     end
     
     methods
-        function obj = Record(date, year, session, subject, repetition, type, online)
+        function obj = Record(obj,date, year, session, subject, repetition, type, online)
             % Constructor to initialize the properties
             if nargin > 0
                 obj.Date = date;
                 obj.Year = year;
                 obj.Session = session;
                 obj.Subject = subject;
-                obj.Repitition = repetition;
+                obj.Repetition = repetition;
                 obj.Type = type;
                 obj.Online = online;
                 obj.Filename = filename;
             end
         end
-        function obj.Spe
-            obj.
-        end
+        % function obj = Store(obj, pe_data, pe_spectrum, pe_famp)
+        %     obj.Spectrum = pe_spectrum;
+        %     obj.PEData = pe_data;
+        %     obj.Famp = pe_famp;
+        % end
     end
 end
