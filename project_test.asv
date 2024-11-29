@@ -5,44 +5,34 @@ gdfFiles = fullfile({allFiles.folder}, {allFiles.name})';
 % Ensure output is a 1D cell array (transpose if necessary)
 gdfFiles = gdfFiles(:);
 
-curr_session = session;
-curr_session.Date = "11-24-2024"
-curr_session.Year = 2024
+repetitions = ['r001';'r002';'r003';'r004'];
+sessions = ['s001';'s002';'s003'];
+subjects = ['107';'108';'109'];
 
+all_sessions = create_classes(gdfFiles);
+
+% Filtering Sessions
+MI_sessions = {};
+[~, num_sessions] = size(all_sessions);
+for i=1:num_sessions
+    if (convertCharsToStrings(all_sessions{i}.Type) == "MI")
+        % MI_sessions{end+1} = all_sessions{i};
+        curr_session = all_sessions{i};
+        [curr_data, curr_spectrum, curr_famp] = preprocess_session(curr_session.Filename);
+        curr_session.Store()
+    end
+end
+
+[curr_data, curr_spectrum, curr_famp] = preprocess_session(MI_sessions{1}.Filename);
 
 %% TODO LIST
 % Finish Session Variable
 % Finish PCA
 % Signal Cropping
 % Create Model and Test
+% Linear Discriminant Analysis/Linear Regression
+% What happens if we train with first only session of top of that?
 
-%%
-file_chosen = gdfFiles{1};
-file_split = strsplit(file_chosen,"/");
-disp(file_split{end});
-
-[s,h] = sload(file_chosen);
-
-Fs = 256; %                         [Hz] Sampling Frequency
-cutoffHigh = 8; %                   [Hz] High pass component
-cutoffLow = 12; %                   [Hz] Low pass component
-
-%Certain channels are unused:
-s = s(:,1:34);
-
-% %Make and use band pass filter
-[B,A] = butter(5,[cutoffHigh/Fs,cutoffLow/Fs]);
-dataTempFilt = filtfilt(B,A,s);
-
-% dataTempFilt = bandpass(s, [cutoffHigh cutoffLow], Fs);
-
-%Split the EOG and EEG Data
-EOG = dataTempFilt(:,end-1:end);
-dataTempFilt = dataTempFilt(:,1:end-2);
-
-% figure(1);clf;
-% plot(s(:,1),'b-'); hold on;
-% plot(dataTempFilt(:,1),'k-');
 %% EOG Artifact Removal - Regression
 
 %Source: Schlogl et. al. Clinical Neuropsychology 2007
@@ -52,36 +42,46 @@ dataTempFilt = dataTempFilt(:,1:end-2);
 % 
 % dataTempEOG = dataTempFilt - EOG*b;
 
-%% Spatial Filtering - Canonical Correlation Analysis (CCA)
-
-dataSpaceTempFilt = car(dataTempFilt);
-% 
-% figure(1);clf;
-% plot(dataTempFilt(:,2),'b-'); hold on;
-% plot(dataSpaceTempFilt(:,2),'k-');
-
-%% Frequency Transform
-[num_samples, num_channels] = size(dataSpaceTempFilt);
-channel_plotted = 1;
-
-% % FFT Spatial and Time Filtered
-% [freqs, freqSpaceTempFilt] = fft_with_shift(dataSpaceTempFilt, Fs, 1);
-% figure(3); clf;
-% plot(freqs, abs(freqSpaceTempFilt(:,channel_plotted)),'b-');
-% 
-% % Raw data fft
-% figure(5); clf;
-% [freqs, freqS] = fft_with_shift(s, Fs, 1);
-% plot(freqs, abs(freqS(:,channel_plotted)),'b-');
-% 
-% % FFT Temporal Filter
-% figure(6); clf;
-% [freqs, freqTempFilt] = fft_with_shift(dataTempFilt, Fs, 1);
-% plot(freqs(:), abs(freqTempFilt(:,channel_plotted)),'b-');
-
 %% PCA 
-coeff = pca(dataSpaceTempFilt);
+% coeff = pca(dataSpaceTempFilt);
 
+%% Model 
+
+
+% Preprocess Each Session and Return, 
+function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_session(curr_session_file)
+
+    [s,h] = sload(curr_session_file);
+    
+    Fs = 256; %                         [Hz] Sampling Frequency
+    cutoffHigh = 8; %                   [Hz] High pass component
+    cutoffLow = 12; %                   [Hz] Low pass component
+    
+    % Certain channels are unused:
+    s = s(:,1:34);
+    
+    % Make and use band pass filter
+    [B,A] = butter(5,[cutoffHigh/Fs,cutoffLow/Fs]);
+    dataTempFilt = filtfilt(B,A,s);
+
+    % TODO: Add Crop in Time Domain
+
+    % Split the EOG and EEG Data
+    EOG = dataTempFilt(:,end-1:end);
+    dataTempFilt = dataTempFilt(:,1:end-2);
+
+    % TODO: Add EOG Artifact Removal
+
+    % Spatial Filter
+    dataSpaceTempFilt = car(dataTempFilt);
+    
+    pe_data = dataSpaceTempFilt;
+
+    % Frequency Transform
+    [pe_spectrum, pe_freq_amplitude] = fft_with_shift(dataTempFilt, Fs, 1);
+    pe_spectrum = pe_spectrum';
+    
+end
 
 % Spatial Filtering for EEG
 function [filtered_eeg] = car(eeg)
@@ -100,4 +100,29 @@ end
 function [freqs, reconstructed_signal] = ifft_with_shift(fft_data, sr)
     reconstructed_signal = ifft(ifftshift(fft_data)); 
     freqs = 0;
+end
+
+
+function [all_sessions] = create_classes(gdfFiles) 
+    [num_files,temp]=size(gdfFiles);
+    all_sessions =  {};
+
+    for i=1:num_files
+        file_chosen = gdfFiles{i};
+        file_split = strsplit(file_chosen,"/");
+        % disp(file_split{end});
+        session_split = strsplit(file_split{end},"_");
+        curr_session = session;
+        curr_session.Subject = cell2mat(session_split(2));
+        curr_session.Session = cell2mat(session_split(6));
+        curr_session.Repetition = cell2mat(session_split(7));
+        curr_session.Year = session_split(9);
+        temp_month = session_split(10);
+        temp_day = session_split(11);
+        curr_session.Date = temp_month{1} + "-" + temp_day{1};
+        curr_session.Online = cell2mat(session_split(4));
+        curr_session.Type = cell2mat(session_split(5));
+        curr_session.Filename = file_chosen;
+        all_sessions{i} = curr_session;
+    end
 end
