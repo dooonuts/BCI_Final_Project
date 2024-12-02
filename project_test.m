@@ -30,14 +30,82 @@ for i=1:num_sessions
         MI_sessions{end+1} = curr_session;
     end
 end
+
+%% Testing Classifier
+
+offline_mi_sessions = {};
+online_mi_sessions = {};
+
+[~, num_mi_sessions] = size(MI_sessions);
+for i=1:num_mi_sessions
+    if(convertCharsToStrings(MI_sessions{i}.Online) == "Online")
+        curr_session = MI_sessions{i};
+        [~,num_trials] = size(curr_session.PE_MI_Famp);
+        curr_PE_MI_Famp = zeros(10,num_elements*32);
+        curr_PE_Rest_Famp = zeros(10,num_elements*32);
+        
+        for i=1:num_trials
+            temp_mi =  pca(abs(curr_session.PE_MI_Famp{i}));
+            temp_rest =  pca(abs(curr_session.PE_Rest_Famp{i}));
+            X_2D_mi = reshape(temp_mi, num_elements*32, [])';  % Transpose to make it N x M
+            X_2D_rest = reshape(temp_rest, num_elements*32, [])';  % Transpose to make it N x M
+            curr_PE_MI_Famp(i,:) = X_2D_mi;
+            curr_PE_Rest_Famp(i,:) = X_2D_rest;
+        end
+
+        % curr_session.PE_MI_Famp = curr_PE_MI_Famp;
+        % curr_session.PE_Rest_Famp = curr_PE_Rest_Famp;
+        online_mi_sessions{end+1} = curr_session; % 10x32x32
+    else
+        offline_mi_sessions{end+1} = MI_sessions{i};
+    end 
+
+end
+
+%%
+
+total_trials = vertcat(curr_PE_MI_Famp, curr_PE_Rest_Famp);
+total_tags = horzcat(cell2mat(online_mi_sessions{1}.MI_Tags), cell2mat(online_mi_sessions{1}.Rest_Tags));
+
+% train on offline, test on online
+% stuff = fitclinear(online_mi_sessions{1}.PE_MI_Famp, cell2mat(online_mi_sessions{1}.MI_Tags));
+% stuff = fitclinear(zeros(10,32), cell2mat(online_mi_sessions{1}.MI_Tags));
+
+% Load or define EEG data
+% X: (num_samples x num_features) matrix of features (EEG data)
+% y: (num_samples x 1) vector of labels (1 or 2)
+
+% Example initialization (replace this with your actual data)
+% X = randn(100, 64); % 100 trials, 64 features per trial
+% y = randi([1, 2], 100, 1); % Random labels (1 or 2)
+
+% % Split the data into training and testing sets
+% cv = cvpartition(size(X, 1), 'HoldOut', 0.3);
+% X_train = X(training(cv), :);
+% y_train = y(training(cv));
+% X_test = X(test(cv), :);
+% y_test = y(test(cv));
+% 
+% Train an LDA classifier
+lda_model = fitcdiscr(total_trials, total_tags);
+
+% Predict on test data
+y_pred = predict(lda_model, total_trials)';
+
+% Evaluate accuracy
+accuracy = sum(y_pred == total_tags) / length(total_tags);
+fprintf('Accuracy: %.2f%%\n', accuracy * 100);
+
 %% Testing 
-first_trial = curr_session.PE_MI{1};
-first_trial_spectrum = curr_session.PE_MI_Spectrum;
-first_trial_famp = curr_session.PE_MI_Famp;
-figure(1); clf;
-plot(first_trial);
-figure(2); clf;
-plot(first_trial_spectrum{1},first_trial_famp{1});
+% first_trial = curr_session.PE_MI{1};
+% first_trial_spectrum = curr_session.PE_MI_Spectrum;
+% first_trial_famp = curr_session.PE_MI_Famp;
+% figure(1); clf;
+% plot(first_trial);
+% figure(2); clf;
+% plot(first_trial_spectrum{1},first_trial_famp{1});
+
+
 
 %% TODO LIST
 % Finish PCA
@@ -139,7 +207,6 @@ function [all_sessions] = create_classes(gdfFiles)
     for i=1:num_files
         file_chosen = gdfFiles{i};
         file_split = strsplit(file_chosen,"/");
-        % disp(file_split{end});
         session_split = strsplit(file_split{end},"_");
         curr_session = session;
         curr_session.Subject = cell2mat(session_split(2));

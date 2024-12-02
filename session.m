@@ -9,6 +9,7 @@ classdef session
         Type % MI vs ME vs EOG
         Online % Online vs Offline
         Filename % Filename
+        Label % 
         % Spectrum % Spectrum
         % Famp % Frequencies
         % PEData % PEData
