@@ -1,5 +1,6 @@
 clear;
-project_data_folder =  "./bci_project_data/";
+% project_data_folder =  "./bci_project_data/";
+project_data_folder = "C:\lls_university\Linshen_pc\UT_Austin\fall2024\ECE385JBIOENG\final_project\BCI Project Data\";
 allFiles = dir(fullfile(project_data_folder, '**', '*.gdf'));
 gdfFiles = fullfile({allFiles.folder}, {allFiles.name})';
 % Ensure output is a 1D cell array (transpose if necessary)
@@ -122,7 +123,176 @@ y_pred = predict(lda_model, compressed_online_sessions);
 
 % Evaluate accuracy
 accuracy = sum(y_pred == total_online_tags) / length(total_online_tags);
-fprintf('Accuracy: %.2f%%\n', accuracy * 100);
+fprintf('Accuracy: %.2f%%\n', accuracy * 100); % 63.12% here is the accuracy for Daniel's work
+%% PCA Linshen's block 
+% 1 PCA demo 
+data = total_sessions'; % 
+% Step 1: std
+data_standardized = zscore(data);
+% Step 2: 
+[coeff, score, latent, tsquared, explained] = pca(data_standardized);
+
+% coeff: The coefficient matrix of the principal components, each column is a principal component
+% score: Projection of original data onto principal components
+% latent: The eigenvalue of each principal component indicates the amount of variance explained
+% explained: The proportion of variance explained by each principal component (percentage)
+
+% Step 3: Analyze principal components
+% View the cumulative proportion of variance explained by the first 10 principal components
+cumsum_explained = cumsum(explained); % Cumulative proportion of variance explained
+disp('The cumulative variance ratio of the first 10 principal components is:');
+disp(cumsum_explained(1:10));
+
+% Decide how many principal components to keep, for example, keep those that explain more than 95% of the variance
+num_components = find(cumsum_explained >= 95, 1);
+disp(['number of component : ', num2str(num_components)]);
+
+% Step 4: PCA result
+reduced_data = score(:, 1:num_components);
+
+% Step 5: Data Visulization
+% to PCA 
+if num_components >= 2
+    figure;
+    scatter(reduced_data(:, 1), reduced_data(:, 2), 50, 'filled');
+    xlabel('Principal Component 1');
+    ylabel('Principal Component 2');
+    title('PCA: First Two Principal Components');
+    grid on;
+end
+
+% 3D visulization 
+if num_components >= 3
+    figure;
+    scatter3(reduced_data(:, 1), reduced_data(:, 2), reduced_data(:, 3), 50, 'filled');
+    xlabel('Principal Component 1');
+    ylabel('Principal Component 2');
+    zlabel('Principal Component 3');
+    title('PCA: First Three Principal Components');
+    grid on;
+end
+
+% Step 6: save the data
+% save('reduced_data.mat', 'reduced_data');
+%% after PCA 58 feature for classification 
+labels = zeros(240, 1); 
+labels(1:40) = 0;
+labels(81:160) = 0;
+labels(41:80) = 1;
+labels(161:240) = 1;
+
+reduced_data_sequence_class0 = reduced_data([1:40, 81:160], :); %
+reduced_data_sequence_class1 = reduced_data([41:80, 161:240], :); % 
+
+
+%% splite the real and Image part 
+% abstract the final version 
+first_200_samples = reduced_data_sequence_class0; % 120 x 58 complex matrix
+last_200_samples = reduced_data_sequence_class1; % 120 x 58 complex matrix
+
+real_part_first = real(first_200_samples); 
+imag_part_first = imag(first_200_samples); 
+
+% abstract last_200_samples real part and image part 
+real_part_last = real(last_200_samples); % abstract real 
+imag_part_last = imag(last_200_samples); % abstract image 
+
+% check result 
+disp('Real part of first_200_samples:');
+disp(real_part_first);
+
+disp('Imaginary part of first_200_samples:');
+disp(imag_part_first);
+
+disp('Real part of last_200_samples:');
+disp(real_part_last);
+
+disp('Imaginary part of last_200_samples:');
+disp(imag_part_last);
+
+% real and image part, together.
+feature_first_new = [real_part_first, imag_part_first]; % size 120 x 116
+feature_last_new = [real_part_last, imag_part_last];   % size 120 x 116
+
+
+%% visulization, 116 class 
+% variable 1 and variable 2 belongs t0 two different class 0 and 1.
+first_200_samples = feature_first_new; % first 200 sample 
+last_200_samples = feature_last_new; % last 200 sample 
+
+% combine the 200 sample as a matrix 
+% combined_samples = [first_200_samples, last_200_samples]; % 这里还需要改成两个不同的
+combined_samples = [];
+for i = 1:116
+    combined_samples = [combined_samples; first_200_samples(:, i)'; last_200_samples(:, i)'];
+end
+combined_samples=combined_samples'
+
+% boxplot
+figure; % can no visulize the complexity value here.
+boxplot(combined_samples, 'Labels', arrayfun(@(x) ['Variable ', num2str(x)], 1:232, 'UniformOutput', false));
+
+% legend and title 
+legend({'First 200 Samples', 'Last 200 Samples'}, 'Location', 'best'); % the legned does not shows clearly  
+%% 3D visulization 
+
+% there are no such different between the first and second layer
+% combine data with t-SNE
+all_samples = [first_200_samples; last_200_samples];  % combine the data
+
+% tSNE 
+tsne_result = tsne(all_samples, 'NumDimensions', 3);
+
+% the data after tSNE 
+first_200_tsne = tsne_result(1:120, :);  % first 200 sample 3D dataset 
+last_200_tsne = tsne_result(121:240, :); % last 200 sample 3D dataset 
+
+% draw the figure.
+figure;
+scatter3(first_200_tsne(:, 1), first_200_tsne(:, 2), first_200_tsne(:, 3), 50, 'r', 'filled');
+hold on;
+scatter3(last_200_tsne(:, 1), last_200_tsne(:, 2), last_200_tsne(:, 3), 50, 'b', 'filled');
+xlabel('t-SNE 1');
+ylabel('t-SNE 2');
+zlabel('t-SNE 3');
+title('3D t-SNE Visualization of First 200 vs Last 200 Samples');
+legend({'First 200 Samples', 'Last 200 Samples'}, 'Location', 'best');
+grid on;
+%% MLP classification 
+ k = 15;
+[MLP_c1_matrix_106] = MLPTrainingWithKFold(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k);
+
+%% MLP result 
+plotConfusionMatrixAndAccuracy(MLP_c1_matrix_106, 106);
+%% 2 SVM 
+k = 15;
+[SVM_c1_matrix_106] = SVMTrainingWithKFold_SVM(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k);
+
+%% 2 SVM result 
+
+plotConfusionMatrixAndAccuracy(SVM_c1_matrix_106, 106);
+
+%% 3 Linear method  
+
+k = 15;  
+[li_c1_matrix_106] = LinearTrainingWithKFold(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k);
+%% 3 Linear model 
+plotConfusionMatrixAndAccuracy(li_c1_matrix_106, 106);
+
+%% 4 XGBoost 
+[all_error_items_XGBoost, XGBoost_c1_matrix_106] = XGBoostClassification(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k); 
+
+%% 4 XGBoost display 
+plotConfusionMatrixAndAccuracy(XGBoost_c1_matrix_106, 106);
+
+%% 5 Random forest 
+[all_error_items_Random_forest, RF_c1_matrix_106] = randomForestClassification(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k);
+
+%% 5 Random Forest display 
+plotConfusionMatrixAndAccuracy(RF_c1_matrix_106, 106);
+
+
+
 
 %% TODO LIST
 % Create Model and Test
@@ -247,7 +417,7 @@ function [all_sessions] = create_classes(gdfFiles)
 
     for i=1:num_files
         file_chosen = gdfFiles{i};
-        file_split = strsplit(file_chosen,"/");
+        file_split = strsplit(file_chosen,"\");
         session_split = strsplit(file_split{end},"_");
         curr_session = session;
         curr_session.Subject = cell2mat(session_split(2));
@@ -263,3 +433,231 @@ function [all_sessions] = create_classes(gdfFiles)
         all_sessions{i} = curr_session;
     end
 end
+
+% post preprocessing draw 
+function plotConfusionMatrixAndAccuracy(confMatrix, subjectNum)
+    % confuse matrix 
+    figure;
+    confusionchart(confMatrix);
+    title(['Confusion Matrix for Subject ' num2str(subjectNum)]);
+    
+    % get TP、FN、FP and TN
+    TP = confMatrix(1, 1); % (True Positive)
+    FN = confMatrix(1, 2); % (False Negative)
+    FP = confMatrix(2, 1); % (False Positive)
+    TN = confMatrix(2, 2); % (True Negative)
+    
+    % accuracy 
+    accuracy = (TP + TN) / (TP + TN + FP + FN);
+    
+    % show accuracy 
+    disp(['Subject ' num2str(subjectNum) ' Accuracy:']);
+    disp(accuracy);
+end
+
+% 1 MLP 
+
+function [linear_c1_matrix_106] = MLPTrainingWithKFold(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k)
+    % MLPTrainingWithKFold: 使用K-fold交叉验证训练MLP模型并计算混淆矩阵
+    %
+    % 输入:
+    %   a1vsa2vsa3 - 特征数据矩阵 (num_samples x num_features)
+    %   MAV_Labels_a1vsa2vsa3 - 标签向量 (num_samples x 1)
+    %   k - K-fold交叉验证的折数
+    %
+    % 输出:
+    %   linear_c1_matrix_106 - 累积的混淆矩阵 (2x2)
+
+    % 初始化混淆矩阵
+    linear_c1_matrix_106 = zeros(2, 2);
+
+    % 交叉验证分割数据
+    linear_c1 = cvpartition(length(MAV_Labels_a1vsa2vsa3), 'KFold', k);
+
+    % 遍历每一折进行训练和测试
+    for i = 1:k
+        disp(sprintf("Iteration no: %d", i)); 
+        
+        % 使用 fitcnet 训练 MLP 模型
+        MLP_Model_106 = fitcnet(a1vsa2vsa3(linear_c1.training(i),:), ...
+                                MAV_Labels_a1vsa2vsa3(linear_c1.training(i)), ...
+                                'LayerSizes', [200 200 200], ...       % 网络层大小
+                                'Activations', 'relu', ...            % 激活函数
+                                'Standardize', true, ...              % 数据标准化
+                                'Lambda', 2e-5);                     % 正则化参数
+
+        % 测试集预测
+        test = a1vsa2vsa3(linear_c1.test(i), :);
+        predictedLabels1 = predict(MLP_Model_106, test);
+        
+        % 计算混淆矩阵
+        linear_confused1 = confusionmat(MAV_Labels_a1vsa2vsa3(linear_c1.test(i)), predictedLabels1);
+        
+        % 如果混淆矩阵是2x2的，则累积结果
+        [numRows1, ~] = size(linear_confused1);
+        if numRows1 == 2
+            linear_c1_matrix_106 = linear_c1_matrix_106 + linear_confused1;
+        end
+    end
+end
+
+
+% 2 SVM 
+
+function [linear_c1_matrix_106] = SVMTrainingWithKFold_SVM(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k)
+    % SVMTrainingWithKFold_SVM: 使用K-fold交叉验证训练SVM模型并计算混淆矩阵
+    %
+    % 输入:
+    %   a1vsa2vsa3 - 特征数据矩阵 (num_samples x num_features)
+    %   MAV_Labels_a1vsa2vsa3 - 标签向量 (num_samples x 1)
+    %   k - K-fold交叉验证的折数
+    %
+    % 输出:
+    %   linear_c1_matrix_106 - 累积的混淆矩阵 (2x2)
+
+    % 初始化混淆矩阵
+    linear_c1_matrix_106 = zeros(2, 2);
+
+    % 交叉验证分割数据
+    linear_c1 = cvpartition(length(MAV_Labels_a1vsa2vsa3), 'KFold', k);
+
+    % 遍历每一折进行训练和测试
+    for i = 1:k-1
+        disp(sprintf("Iteration no: %d", i)); 
+        
+        % 使用 fitcsvm 训练 SVM 模型
+        SVM_Model_106 = fitcsvm(a1vsa2vsa3(linear_c1.training(i),:), ...
+                                MAV_Labels_a1vsa2vsa3(linear_c1.training(i)), ...
+                                'KernelFunction', 'rbf', ...          % 径向基核函数
+                                'BoxConstraint', 1, ...              % 正则化参数
+                                'Standardize', true, ...             % 数据标准化
+                                'KernelScale', 'auto');              % 自动调整核函数参数
+        
+        % 测试集预测
+        test = a1vsa2vsa3(linear_c1.test(i), :);
+        predictedLabels1 = predict(SVM_Model_106, test);
+        
+        % 计算混淆矩阵
+        linear_confused1 = confusionmat(MAV_Labels_a1vsa2vsa3(linear_c1.test(i)), predictedLabels1);
+        
+        % 如果混淆矩阵是2x2的，则累积结果
+        [numRows1, ~] = size(linear_confused1);
+        if numRows1 == 2
+            linear_c1_matrix_106 = linear_c1_matrix_106 + linear_confused1;
+        end
+    end
+end
+
+
+
+% 3 LiNear Model 
+function [linear_c1_matrix_106] = LinearTrainingWithKFold(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k)
+    linear_c1_matrix_106 = zeros(2, 2);
+    linear_c1 = cvpartition(length(MAV_Labels_a1vsa2vsa3), 'KFold', k);
+    for i = 1:k-1
+        disp(sprintf("Iteration no: %d", i)); 
+        
+ 
+        Linear_Model_106 = fitclinear(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, ...
+                                      'Learner', 'logistic', ...          
+                                      'Regularization', 'ridge', ...     
+                                      'Lambda', 1e-4);                    
+        
+        test = a1vsa2vsa3(linear_c1.test(i), :);
+        predictedLabels1 = predict(Linear_Model_106, test);      
+        linear_confused1 = confusionmat(MAV_Labels_a1vsa2vsa3(linear_c1.test(i)), predictedLabels1);       
+        [numRows1, ~] = size(linear_confused1);
+        if numRows1 == 2
+            linear_c1_matrix_106 = linear_c1_matrix_106 + linear_confused1;
+        end
+    end
+end
+
+
+
+% 4 XGBoost 
+
+function [all_error_items, confusionMatrix] = XGBoostClassification(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k)
+
+    confusionMatrix = zeros(2, 2);
+    all_error_items = [];
+    
+
+    linear_c1 = cvpartition(length(MAV_Labels_a1vsa2vsa3), 'KFold', k);
+
+    for i = 1:k
+        disp(sprintf("Iteration no: %d", i)); 
+        
+
+        XGB_Model_106 = fitcensemble(a1vsa2vsa3(linear_c1.training(i), :), ...
+                                     MAV_Labels_a1vsa2vsa3(linear_c1.training(i)), ...
+                                     'Method', 'LogitBoost', ...  
+                                     'NumLearningCycles', 100, ... 
+                                     'Learners', templateTree('MaxNumSplits', 20)); 
+        
+
+        test = a1vsa2vsa3(linear_c1.test(i), :);
+        trueLabels = MAV_Labels_a1vsa2vsa3(linear_c1.test(i));
+        predictedLabels1 = predict(XGB_Model_106, test);
+        
+
+        testIndices = find(linear_c1.test(i)); 
+        error_indices = testIndices(predictedLabels1' ~= trueLabels); 
+        all_error_items = [all_error_items; error_indices]; 
+
+
+        linear_confused1 = confusionmat(MAV_Labels_a1vsa2vsa3(linear_c1.test(i)), predictedLabels1);
+        
+        [numRows1, ~] = size(linear_confused1);
+        if numRows1 == 2
+            confusionMatrix = confusionMatrix + linear_confused1;
+        end
+    end
+end
+
+
+
+
+% 5 Random forest 
+
+function [all_error_items, confusionMatrix] = randomForestClassification(a1vsa2vsa3, MAV_Labels_a1vsa2vsa3, k)
+    
+    % inital con
+    confusionMatrix = zeros(2, 2);
+    all_error_items = [];
+    
+    % Cross-validation split data
+    linear_c1 = cvpartition(length(MAV_Labels_a1vsa2vsa3), 'KFold', k);
+
+    for i = 1:k
+        disp(sprintf("Iteration no: %d", i));
+        
+        % Random Forest training 
+        RF_Model_106 = TreeBagger(50, ... % number of tree 
+                                  a1vsa2vsa3(linear_c1.training(i), :), ...
+                                  MAV_Labels_a1vsa2vsa3(linear_c1.training(i)), ...
+                                  'Method', 'classification', ...
+                                  'NumPredictorsToSample', 'all', ...
+                                  'OOBPrediction', 'On');
+        
+        % test strategy training 
+        test = a1vsa2vsa3(linear_c1.test(i), :);
+        trueLabels = MAV_Labels_a1vsa2vsa3(linear_c1.test(i));
+        predictedLabels1 = str2double(predict(RF_Model_106, test)); % output as str
+        
+        % output item number 
+        testIndices = find(linear_c1.test(i)); % test item number 
+        error_indices = testIndices(predictedLabels1' ~= trueLabels); % Wrong tag index
+        all_error_items = [all_error_items; error_indices]; % Aggregate Error Number
+        
+        % Calculate the confusion matrix 
+        linear_confused1 = confusionmat(MAV_Labels_a1vsa2vsa3(linear_c1.test(i)), predictedLabels1);
+        
+        [numRows1, ~] = size(linear_confused1);
+        if numRows1 == 2
+            confusionMatrix = confusionMatrix + linear_confused1;
+        end
+    end
+end
+
+ 
