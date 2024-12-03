@@ -10,15 +10,18 @@ sessions = ['s001';'s002';'s003'];
 subjects = [107;108;109];
 
 % HyperParameters
-curr_subject = 108; 
-num_elements = 10000;
+curr_subject = 108; % 107 needs 9000, 108 and 109 can use 8000
+num_elements = 9000;
 num_trials = 10;
 num_channels = 32;
-num_frequencies = 10000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
+num_frequencies = 8000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
 SHUFFLE_FLAG = true;
 PCA_FLAG = true;
-num_features = 235; % Total is 240 for 1 subject
-k=8; % Number of Folds
+num_features = 230; % Total is 239 for 1 subject
+k=20; % Number of Folds
+model_type = 'lda'; % Choice between lda, svm, mlp
+
+RANDOM_FLAG = true;
 
 all_sessions = create_classes(gdfFiles);
 
@@ -96,25 +99,37 @@ end
 
 total_online_sessions = vertcat(total_online_mi_famp, total_online_rest_famp); % Gives 160x320000;
 total_online_tags = vertcat(total_online_mi_tags, total_online_rest_tags); % Gives 160x1;
+% Testing only offline sessions
+% total_sessions = total_offline_sessions; % Should give 240x320000;
+% total_tags = total_offline_tags; % Should give 240x1;
+% Testing only online sessions
+% total_sessions = total_online_sessions; % Should give 240x320000;
+% total_tags = total_online_tags; % Should give 240x1;
 
 total_sessions = vertcat(total_offline_sessions, total_online_sessions); % Should give 240x320000;
 total_tags = vertcat(total_offline_tags, total_online_tags); % Should give 240x1;
 
-total_sessions = total_sessions'; % Need to do this for PCA
+% total_sessions = total_sessions'; % Need to do this for PCA
 
 %% PCA
 if(PCA_FLAG)
     % Should still be split  by trial so can separate later and then run
     % training, need to add real to make it not complex
-    [compressed_total_sessions,scoreTrain,~,~,explained,mu] = pca(real(total_sessions)); % Gives 240x240 - trials should still be second axis
-    compressed_total_sessions = compressed_total_sessions'; % Gives 240x240 - trials should be in first axis - matching total tags
+    [compressed_total_sessions,scoreTrain,latent,tsquared,explained,mu] = pca(total_sessions); % Gives 240x240 - trials should first axis
+    % [compressed_total_sessions,scoreTrain,~,~,explained,mu] = pca(total_sessions); % Gives 240x240 - trials should still be second axis
+    % compressed_total_sessions = compressed_total_sessions'; % Gives 240x240 - trials should be in first axis - matching total tags
     % compressed_total_sessions = compressed_total_sessions; % Gives 240x240 - trials should be in second axis - matching total tags
     
     % Splitting Dataset And Splitting PCA Features
     % Get Num PCA Features
-    data = compressed_total_sessions(:,1:num_features);
+    % Select the number of components that explain 95% of the variance
+    explained_variance = cumsum(explained) / sum(explained);
+    num_components = find(explained_variance >= 0.95, 1); % Select the first component meeting the threshold
+    disp("95% variance from this many components: "+num2str(num_components));
+    % data = compressed_total_sessions(1:num_features,:)';
+    data = real(scoreTrain(:,1:num_features));
 else
-    data = total_sessions'; % Can never run it without PCA b/c too many features
+    data = total_sessions; % Can never run it without PCA b/c too many features
 end
 
 %% Cross Fold/Split Data + Shuffle
@@ -126,7 +141,10 @@ if(SHUFFLE_FLAG)
     [data, labels] = shuffle_arrays(data, labels);
 end
 
-% labels(randperm(length(labels))); % Random permutation of labels for seeing what "chance" is
+if(RANDOM_FLAG)
+    labels(randperm(length(labels))); % Random permutation of labels for seeing what "chance" is
+end
+
 mean_accuracy = 0;
 % Perform k-fold cross-validation
 for fold = 1:k
@@ -134,14 +152,22 @@ for fold = 1:k
     testIdx = test(cv, fold);  % Test set indices
 
     training_data = data(trainIdx, :);  % Training data
-    prediction_data = data(testIdx, :);    % Test data
     training_labels = labels(trainIdx);  % Training labels
+    prediction_data = data(testIdx, :);    % Test data
     prediction_labels = labels(testIdx);    % Test labels
-
-    lda_model = fitcdiscr(training_data, training_labels);
-    linear_pred = predict(lda_model, prediction_data);
-    [accuracy,~,~] = plotConfusionMatrix(prediction_labels, linear_pred, true);
-
+    accuracy = 0;
+    if strcmp(model_type,'lda')
+        [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
+    elseif strcmp(model_type,'svm')
+        [accuracy,~,~] = svm(training_data,training_labels,prediction_data,prediction_labels);
+    elseif strcmp(model_type,'mlp')
+        [accuracy,~,~] = mlp(training_data,training_labels,prediction_data,prediction_labels);
+    else
+        disp("Wrong Model Type!")
+        break;
+    end
+    % [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
+    disp(accuracy);
     mean_accuracy = mean_accuracy+accuracy;
 end
 mean_accuracy = mean_accuracy/k;
@@ -150,12 +176,18 @@ disp("Mean Accuracy: " + num2str(mean_accuracy));
 %% Online vs Offline 2x is because rest vs mi;
 % compressed_offline_sessions = compressed_total_sessions_num_features(1:2*num_offline_sessions*num_trials,:);
 % compressed_online_sessions = compressed_total_sessions_num_features((2*num_offline_sessions*num_trials)+1:end,:);
+
+
+% compressed_offline_sessions = data(1:2*num_offline_sessions*num_trials,:);
+% compressed_online_sessions = data(2*num_offline_sessions*num_trials+1:end,:);
 % 
 % training_data = compressed_offline_sessions;
 % training_labels = total_offline_tags;
 % prediction_data = compressed_online_sessions;
 % prediction_labels = total_online_tags;
-
+% 
+% [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
+% disp("Online Accuracy : " + num2str(accuracy));
 
 % Looks like shuffling the data doesn't matter for performance either way,
 % if given same online/offline data it works so I think this is correct
@@ -372,6 +404,23 @@ function croppedMatrix = cropCenter(matrix, num_frequencies)
         
         croppedMatrix = matrix(startIdx:startIdx + num_frequencies - 1, :);
     end
-
 end
 
+function [accuracy, precision, recall,linear_pred] = lda(training_data, training_labels, prediction_data, prediction_labels)
+    lda_model = fitcdiscr(training_data, training_labels);
+    %lda_model = fitclinear(training_data, training_labels);
+    linear_pred = predict(lda_model, prediction_data);
+    [accuracy,precision,recall] = plotConfusionMatrix(prediction_labels, linear_pred, true);
+end
+
+function [accuracy, precision, recall, svm_pred] = svm(training_data, training_labels, prediction_data, prediction_labels)
+    svm_model=fitcsvm(training_data,training_labels,'KernelFunction', 'linear');
+    svm_pred = predict(svm_model, prediction_data);
+    [accuracy,precision,recall] = plotConfusionMatrix(prediction_labels, svm_pred, true);
+end
+
+function [accuracy, precision, recall, mlp_pred] = mlp(training_data, training_labels, prediction_data, prediction_labels)
+    mlp_model = fitcnet(training_data,training_labels,'LayerSizes', [5 10]);
+    mlp_pred = predict(mlp_model,prediction_data);
+    [accuracy,precision,recall] = plotConfusionMatrix(prediction_labels, mlp_pred, true);
+end
