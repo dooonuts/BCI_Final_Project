@@ -139,7 +139,15 @@ for fold = 1:k
     training_labels = labels(trainIdx);  % Training labels
     prediction_labels = labels(testIdx);    % Test labels
 
-<<<<<<< HEAD
+    lda_model = fitcdiscr(training_data, training_labels);
+    linear_pred = predict(lda_model, prediction_data);
+    [accuracy,~,~] = plotConfusionMatrix(prediction_labels, linear_pred, true);
+
+    mean_accuracy = mean_accuracy+accuracy;
+end
+mean_accuracy = mean_accuracy/k;
+disp("Mean Accuracy: " + num2str(mean_accuracy));
+    
 % Evaluate accuracy
 accuracy = sum(y_pred == total_online_tags) / length(total_online_tags);
 fprintf('Accuracy: %.2f%%\n', accuracy * 100); % 63.12% here is the accuracy for Daniel's work
@@ -311,17 +319,6 @@ plotConfusionMatrixAndAccuracy(XGBoost_c1_matrix_106, 106);
 plotConfusionMatrixAndAccuracy(RF_c1_matrix_106, 106);
 
 
-
-=======
-    lda_model = fitcdiscr(training_data, training_labels);
-    linear_pred = predict(lda_model, prediction_data);
-    [accuracy,~,~] = plotConfusionMatrix(prediction_labels, linear_pred, true);
-
-    mean_accuracy = mean_accuracy+accuracy;
-end
-mean_accuracy = mean_accuracy/k;
-disp("Mean Accuracy: " + num2str(mean_accuracy));
-
 %% Online vs Offline 2x is because rest vs mi;
 % compressed_offline_sessions = compressed_total_sessions_num_features(1:2*num_offline_sessions*num_trials,:);
 % compressed_online_sessions = compressed_total_sessions_num_features((2*num_offline_sessions*num_trials)+1:end,:);
@@ -355,7 +352,6 @@ disp("Mean Accuracy: " + num2str(mean_accuracy));
 
 % accuracy = sum(y_pred == total_online_tags) / length(total_online_tags);
 % fprintf('Accuracy: %.2f%%\n', accuracy * 100);
->>>>>>> 64970886109ea8e8b5cadfefebf66d30f3f2cfa5
 
 %% TODO LIST
 % EOG Artifact Removal
@@ -528,7 +524,6 @@ function [all_sessions] = create_classes(gdfFiles)
     end
 end
 
-<<<<<<< HEAD
 % post preprocessing draw 
 function plotConfusionMatrixAndAccuracy(confMatrix, subjectNum)
     % confuse matrix 
@@ -755,8 +750,6 @@ function [all_error_items, confusionMatrix] = randomForestClassification(a1vsa2v
     end
 end
 
- 
-=======
 function [A_shuffled, B_shuffled] = shuffle_arrays(A, B)
     numRows = size(A, 1);
 
@@ -780,4 +773,4 @@ function croppedMatrix = cropCenter(matrix, num_frequencies)
 
 end
 
->>>>>>> 64970886109ea8e8b5cadfefebf66d30f3f2cfa5
+
