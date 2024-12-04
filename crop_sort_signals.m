@@ -1,4 +1,4 @@
-function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,target_h, num_elements)
+function [restMatrix,restTags,miMatrix,miTags,channels] = crop_sort_signals(target_s,target_h, num_elements)
 
     %Usage: After doing sload, use this function with the resulting data
     %(target_s) and headers (target_h)
@@ -13,8 +13,6 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
     %   the data (should also be 1x10)
     %   miTags: 1x10 matrix of the result of every MI trial (7702 for fail,
     %   7703 for success)
-   
-
 
     %769 is the trigger number for resting action
     rest_event_num = sum(target_h.EVENT.TYP == 769,'all');
@@ -62,5 +60,8 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
         end
     
     end
+
+    %Extracting header information
+    channels = h.Label;
 
 end

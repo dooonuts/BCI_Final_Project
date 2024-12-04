@@ -1,6 +1,6 @@
 clear;
 % project_data_folder =  "./bci_project_data/";
-project_data_folder = "C:\lls_university\Linshen_pc\UT_Austin\fall2024\ECE385JBIOENG\final_project\BCI Project Data\";
+project_data_folder = "C:\Users\thien\Documents\BCI Project Data";
 allFiles = dir(fullfile(project_data_folder, '**', '*.gdf'));
 gdfFiles = fullfile({allFiles.folder}, {allFiles.name})';
 % Ensure output is a 1D cell array (transpose if necessary)
