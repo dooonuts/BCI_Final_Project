@@ -91,3 +91,29 @@ elseif strcmp(modelType, 'mlp')
 else
     disp('Unknown model type selected.');
 end
+
+%%
+% List of substrings to check
+substrings = {'apple', 'banana', 'cherry'};
+
+% The string to search
+text = 'I have an apple banana and cherry pie.';
+
+% Logical array to check which substrings are present
+is_present = cellfun(@(sub) contains(text, sub), substrings);
+
+% Check if all substrings are present
+all_present = all(is_present);
+
+% Display results
+if all_present
+    disp('All substrings are present.');
+else
+    disp('Not all substrings are present.');
+    
+    % Display missing substrings
+    missing_substrings = substrings(~is_present);
+    fprintf('Missing substrings:\n');
+    fprintf('%s\n', missing_substrings{:});
+end
+

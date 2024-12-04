@@ -2,7 +2,6 @@ clear;
 project_data_folder =  "./bci_project_data/";
 allFiles = dir(fullfile(project_data_folder, '**', '*.gdf'));
 gdfFiles = fullfile({allFiles.folder}, {allFiles.name})';
-% Ensure output is a 1D cell array (transpose if necessary)
 gdfFiles = gdfFiles(:);
 
 repetitions = ['r001';'r002';'r003';'r004'];
@@ -10,18 +9,18 @@ sessions = ['s001';'s002';'s003'];
 subjects = [107;108;109];
 
 % HyperParameters
-curr_subject = 108; % 107 needs 9000, 108 and 109 can use 8000
+curr_subject = 107; % 107 needs 9000, 108 and 109 can use 8000
 num_elements = 9000;
 num_trials = 10;
 num_channels = 32;
 num_frequencies = 8000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
 SHUFFLE_FLAG = true;
 PCA_FLAG = true;
-num_features = 230; % Total is 239 for 1 subject
+num_features = 90; % Total is 239 for 1 subject
 k=20; % Number of Folds
 model_type = 'lda'; % Choice between lda, svm, mlp
 
-RANDOM_FLAG = true;
+RANDOM_FLAG = false;
 
 all_sessions = create_classes(gdfFiles);
 
@@ -255,8 +254,7 @@ function [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spect
     end
     for i=1:num_mi_trials
         [pe_mi{i},pe_mi_spectrum{i},pe_mi_famp{i}] = preprocess_trial(miMatrix{i});
-    end
-    
+    end 
 end
 
 function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial)
@@ -274,6 +272,7 @@ function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial
     dataTempFilt = dataTempFilt(:,1:end-2);
 
     % TODO: Add EOG Artifact Removal
+    
 
     % Spatial Filter
     dataSpaceTempFilt = car(dataTempFilt);
@@ -281,7 +280,7 @@ function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial
     pe_data = dataSpaceTempFilt;
 
     % Frequency Transform
-    [pe_spectrum, pe_freq_amplitude] = fft_with_shift(dataTempFilt, Fs, 1);
+    [pe_spectrum, pe_freq_amplitude] = fft_with_shift(dataSpaceTempFilt, Fs, 1);
     % pe_spectrum = pe_spectrum';
 end
 

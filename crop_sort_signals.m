@@ -13,8 +13,8 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
     %   the data (should also be 1x10)
     %   miTags: 1x10 matrix of the result of every MI trial (7702 for fail,
     %   7703 for success)
-   
-
+    channel_labels = target_h.Label(1:end-3);
+    save("labels.mat","channel_labels");
 
     %769 is the trigger number for resting action
     rest_event_num = sum(target_h.EVENT.TYP == 769,'all');
@@ -30,6 +30,8 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
     %Initialize counter for each event type
     rest = 1;
     mi = 1;
+    restTags = [];
+    miTags = [];
     
     %Extract each trial according to left/right hand events
     for n = 1:length(target_h.EVENT.TYP)

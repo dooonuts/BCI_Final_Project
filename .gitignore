@@ -1,3 +1,9 @@
 bci_project_data/
 toolboxes/
 temp.mat
+EEGLAB_INPUT/
+*.fdt
+*.set
+*.mat
+*.asv
+*.gdf

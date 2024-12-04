@@ -21,6 +21,7 @@ classdef session
         Rest_Tags % Rest Tags
         PE_Rest_Spectrum % Processed Rest Spectrum
         PE_Rest_Famp % Processed Rest Frequency Amplitude
+        Raw_Data
     end
     
     methods
