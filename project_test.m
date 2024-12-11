@@ -6,22 +6,23 @@ gdfFiles = gdfFiles(:);
 
 repetitions = ['r001';'r002';'r003';'r004'];
 sessions = ['s001';'s002';'s003'];
-subjects = [107;108;109];
+subjects = [107; 108; 109];
 
-% HyperParameters
+% Hyper Parameters
 curr_subject = 107; % 107 needs 9000, 108 and 109 can use 8000
-num_elements = 9000;
+num_elements = 10000;
 num_trials = 10;
 num_channels = 32;
-num_frequencies = 8000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
-SHUFFLE_FLAG = true;
+num_frequencies = 10000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
+SHUFFLE_FLAG = false;
 PCA_FLAG = true;
-num_features = 90; % Total is 239 for 1 subject
-k=20; % Number of Folds
-model_type = 'lda'; % Choice between lda, svm, mlp
+num_features = 60; % Total is 239 for 1 subject
+k=15; % Number of Folds
+model_type = 'svm'; % Choice between lda, svm, mlp
+split_time = 30; % number of samples
+threshold = 0.5;
 
 RANDOM_FLAG = false;
-
 all_sessions = create_classes(gdfFiles);
 
 % Filtering Sessions
@@ -45,7 +46,6 @@ for i=1:num_sessions
 end
 
 %% Reshaping Data for PCA and Classification
-
 offline_mi_sessions = {};
 online_mi_sessions = {};
 
@@ -77,7 +77,7 @@ total_offline_rest_tags = [];
  
 % First cat offline 
 for i=1:num_offline_sessions
-    total_offline_mi_famp =  vertcat(total_offline_mi_famp,offline_mi_sessions{i}.PE_MI_Famp);
+    total_offline_mi_famp =  vertcat(total_offline_mi_famp, offline_mi_sessions{i}.PE_MI_Famp);
     total_offline_mi_tags = vertcat(total_offline_mi_tags, cell2mat(offline_mi_sessions{i}.MI_Tags)'); 
 
     total_offline_rest_famp = vertcat(total_offline_rest_famp, offline_mi_sessions{i}.PE_Rest_Famp);
@@ -98,123 +98,48 @@ end
 
 total_online_sessions = vertcat(total_online_mi_famp, total_online_rest_famp); % Gives 160x320000;
 total_online_tags = vertcat(total_online_mi_tags, total_online_rest_tags); % Gives 160x1;
-% Testing only offline sessions
-% total_sessions = total_offline_sessions; % Should give 240x320000;
-% total_tags = total_offline_tags; % Should give 240x1;
-% Testing only online sessions
-% total_sessions = total_online_sessions; % Should give 240x320000;
-% total_tags = total_online_tags; % Should give 240x1;
 
 total_sessions = vertcat(total_offline_sessions, total_online_sessions); % Should give 240x320000;
 total_tags = vertcat(total_offline_tags, total_online_tags); % Should give 240x1;
+norm_total_sessions = normalize(total_sessions);
+num_offline_trials = 160;
 
-% total_sessions = total_sessions'; % Need to do this for PCA
+offline_sessions = norm_total_sessions(1:num_offline_trials,:);
+online_sessions = norm_total_sessions(num_offline_trials+1:end,:);
 
 %% PCA
 if(PCA_FLAG)
     % Should still be split  by trial so can separate later and then run
     % training, need to add real to make it not complex
-    [compressed_total_sessions,scoreTrain,latent,tsquared,explained,mu] = pca(total_sessions); % Gives 240x240 - trials should first axis
-    % [compressed_total_sessions,scoreTrain,~,~,explained,mu] = pca(total_sessions); % Gives 240x240 - trials should still be second axis
-    % compressed_total_sessions = compressed_total_sessions'; % Gives 240x240 - trials should be in first axis - matching total tags
-    % compressed_total_sessions = compressed_total_sessions; % Gives 240x240 - trials should be in second axis - matching total tags
-    
-    % Splitting Dataset And Splitting PCA Features
-    % Get Num PCA Features
-    % Select the number of components that explain 95% of the variance
-    explained_variance = cumsum(explained) / sum(explained);
-    num_components = find(explained_variance >= 0.95, 1); % Select the first component meeting the threshold
-    disp("95% variance from this many components: "+num2str(num_components));
-    % data = compressed_total_sessions(1:num_features,:)';
-    data = real(scoreTrain(:,1:num_features));
-else
-    data = total_sessions; % Can never run it without PCA b/c too many features
+    [coeff,online_score,latent,tsquared,explained,mu] = pca(offline_sessions); % Gives 240x240 - trials should first axis
+    [coeff,offline_score,latent,tsquared,explained,mu] = pca(online_sessions); % Gives 240x240 - trials should first axis
 end
-
-%% Cross Fold/Split Data + Shuffle
-[num_total_trials,~] = size(data);
-cv = cvpartition(num_total_trials,'KFold',k);
-labels=total_tags; % Note labels should be 240x1 by here, data should be 240xN;
-
-if(SHUFFLE_FLAG)
-    [data, labels] = shuffle_arrays(data, labels);
-end
-
-if(RANDOM_FLAG)
-    labels(randperm(length(labels))); % Random permutation of labels for seeing what "chance" is
-end
-
-mean_accuracy = 0;
-% Perform k-fold cross-validation
-for fold = 1:k
-    trainIdx = training(cv, fold);  % Training set indices
-    testIdx = test(cv, fold);  % Test set indices
-
-    training_data = data(trainIdx, :);  % Training data
-    training_labels = labels(trainIdx);  % Training labels
-    prediction_data = data(testIdx, :);    % Test data
-    prediction_labels = labels(testIdx);    % Test labels
-    accuracy = 0;
-    if strcmp(model_type,'lda')
-        [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
-    elseif strcmp(model_type,'svm')
-        [accuracy,~,~] = svm(training_data,training_labels,prediction_data,prediction_labels);
-    elseif strcmp(model_type,'mlp')
-        [accuracy,~,~] = mlp(training_data,training_labels,prediction_data,prediction_labels);
-    else
-        disp("Wrong Model Type!")
-        break;
-    end
-    % [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
-    disp(accuracy);
-    mean_accuracy = mean_accuracy+accuracy;
-end
-mean_accuracy = mean_accuracy/k;
-disp("Mean Accuracy: " + num2str(mean_accuracy));
 
 %% Online vs Offline 2x is because rest vs mi;
-% compressed_offline_sessions = compressed_total_sessions_num_features(1:2*num_offline_sessions*num_trials,:);
-% compressed_online_sessions = compressed_total_sessions_num_features((2*num_offline_sessions*num_trials)+1:end,:);
+training_data = real(offline_score(:,1:num_features));
+training_labels = total_offline_tags;
+prediction_data = real(online_score(:,1:num_features));
+prediction_labels = total_online_tags;
 
+disp("LDA: ")
+% Linear Discriminant Analysis/Linear Regression
+% Train an LDA classifier on offline data, test on online 
+lda_model = fitcdiscr(training_data, training_labels);
+linear_pred = predict(lda_model, prediction_data);
+plotConfusionMatrix(prediction_labels, linear_pred, true);
 
-% compressed_offline_sessions = data(1:2*num_offline_sessions*num_trials,:);
-% compressed_online_sessions = data(2*num_offline_sessions*num_trials+1:end,:);
-% 
-% training_data = compressed_offline_sessions;
-% training_labels = total_offline_tags;
-% prediction_data = compressed_online_sessions;
-% prediction_labels = total_online_tags;
-% 
-% [accuracy,~,~] = lda(training_data,training_labels,prediction_data,prediction_labels);
-% disp("Online Accuracy : " + num2str(accuracy));
+disp("SVM: ")
+% SVM
+svm_model=fitcsvm(training_data,training_labels,'KernelFunction','linear');
+svm_pred = predict(svm_model, prediction_data);
+plotConfusionMatrix(prediction_labels, svm_pred, true);
 
-% Looks like shuffling the data doesn't matter for performance either way,
-% if given same online/offline data it works so I think this is correct
-
-% disp("LDA: ")
-% % Linear Discriminant Analysis/Linear Regression
-% % Train an LDA classifier on offline data, test on online 
-% lda_model = fitcdiscr(training_data, training_labels);
-% linear_pred = predict(lda_model, prediction_data);
-% plotConfusionMatrix(prediction_labels, linear_pred, true);
-% 
-% disp("SVM: ")
-% % SVM
-% svm_model=fitcsvm(training_data,training_labels,'KernelFunction', 'linear');
-% svm_pred = predict(svm_model, prediction_data);
-% plotConfusionMatrix(prediction_labels, svm_pred, true);
-% 
-% disp("MLP")
-% mlp_model = fitcnet(training_data,training_labels,'LayerSizes', [5 10]);
-% mlp_pred = predict(mlp_model,prediction_data);
-% plotConfusionMatrix(prediction_labels, mlp_pred, true);
-
-% accuracy = sum(y_pred == total_online_tags) / length(total_online_tags);
-% fprintf('Accuracy: %.2f%%\n', accuracy * 100);
+disp("MLP")
+mlp_model = fitcnet(training_data,training_labels,'LayerSizes', [5 10]);
+mlp_pred = predict(mlp_model,prediction_data);
+plotConfusionMatrix(prediction_labels, mlp_pred, true);
 
 %% TODO LIST
-% EOG Artifact Removal
-% K-Fold Cross Validation
 % Create Model and Test
 % Linear Discriminant Analysis/Linear Regression
 % What happens if we train with first only session of top of that?
@@ -272,7 +197,6 @@ function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial
     dataTempFilt = dataTempFilt(:,1:end-2);
 
     % TODO: Add EOG Artifact Removal
-    
 
     % Spatial Filter
     dataSpaceTempFilt = car(dataTempFilt);
@@ -353,7 +277,7 @@ function [accuracy,precision,recall] = plotConfusionMatrix(actual, predicted, pl
     FP = matrix(2, 1);  % False Positives
     TN = matrix(2, 2);  % True Negatives
     accuracy = (TP + TN) / (TP + TN + FP + FN);
-    % disp("subject accuracy: " + num2str(accuracy));
+    disp("subject accuracy: " + num2str(accuracy));
     precision = TP/(TP+FP);
     recall = TP/(TP+FN);
     % disp("precision: " + num2str(precision));
@@ -413,7 +337,7 @@ function [accuracy, precision, recall,linear_pred] = lda(training_data, training
 end
 
 function [accuracy, precision, recall, svm_pred] = svm(training_data, training_labels, prediction_data, prediction_labels)
-    svm_model=fitcsvm(training_data,training_labels,'KernelFunction', 'linear');
+    svm_model=fitcsvm(training_data,training_labels,'KernelFunction','');
     svm_pred = predict(svm_model, prediction_data);
     [accuracy,precision,recall] = plotConfusionMatrix(prediction_labels, svm_pred, true);
 end
