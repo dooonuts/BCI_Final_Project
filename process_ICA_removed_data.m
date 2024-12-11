@@ -20,7 +20,6 @@ curr_subject = 107; % 107 needs 9000, 108 and 109 can use 8000
 window_size = 256; 
 num_trials = 10;
 num_channels = 32;
-num_frequencies = 10000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
 Fs = 256;
 
 all_sessions = create_classes(gdfFiles);
@@ -40,9 +39,26 @@ for i=1:num_sessions
         curr_session.Rest_Tags = rest_tags;
         curr_session.PE_Rest_Spectrum = pe_rest_spectrum;
         curr_session.PE_Rest_Famp = pe_rest_famp;
+
         MI_sessions{end+1} = curr_session;
+
+        %To make my life easier, make a second variable
+        temp_MIFamp = reshape(pe_mi_famp,[1,size(pe_mi_famp,1)*size(pe_mi_famp,2)]);
+        temp_MIFamp = temp_MIFamp(~cellfun(@isempty,temp_MIFamp));
+        temp_RestFamp = reshape(pe_rest_famp,[1,size(pe_rest_famp,1)*size(pe_rest_famp,2)]);
+        temp_RestFamp = temp_RestFamp(~cellfun(@isempty,temp_RestFamp));
+        reshapedMIFamps{i} = temp_MIFamp;
+        reshapedRestFamps{i} = temp_RestFamp;
+        
     end
 end
+
+
+%Find Fisher Scores across all sessions
+reshapedMIFamps = reshapedMIFamps(~cellfun(@isempty,reshapedMIFamps));
+reshapedRestFamps = reshapedRestFamps(~cellfun(@isempty,reshapedRestFamps));
+[bands,fullFisher] = fisherScores(pe_rest_spectrum{1,1},reshapedRestFamps,reshapedMIFamps,32);
+
 
 %% Reshaping Data for PCA and Classification
 
