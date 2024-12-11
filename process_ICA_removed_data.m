@@ -1,9 +1,9 @@
-project_data_folder =  "./bci_project_data/";
+project_data_folder =  "C:\Users\thien\Documents\BCI Project Data\";
 allFiles = dir(fullfile(project_data_folder, '**', '*.gdf'));
 gdfFiles = fullfile({allFiles.folder}, {allFiles.name})';
 gdfFiles = gdfFiles(:);
 
-ica_folder =  "./EEGLAB_INPUT/EEG_ICA_REMOVED/";
+ica_folder =  "C:\Users\thien\Documents\BCI Project Data\107_ICA_PROCESSED_DATA";
 icaFiles = dir(fullfile(ica_folder, '**', '*.set'));
 icaFiles = fullfile({icaFiles.folder}, {icaFiles.name})';
 icaFiles = icaFiles(:);
@@ -16,10 +16,12 @@ icaFiles = icaFiles(:);
 
 %% 
 curr_subject = 107; % 107 needs 9000, 108 and 109 can use 8000
-num_elements = 10000;
+%num_elements = 10000;
+window_size = 256; 
 num_trials = 10;
 num_channels = 32;
 num_frequencies = 10000; % Performs frequency cutout after bandpass for easier entry, should only need like 1000 frequencies for this
+Fs = 256;
 
 all_sessions = create_classes(gdfFiles);
 % Filtering Sessions
@@ -28,7 +30,7 @@ MI_sessions = {};
 for i=1:num_sessions
     if (convertCharsToStrings(all_sessions{i}.Type) == "MI" & str2num(all_sessions{i}.Subject) == curr_subject)
         curr_session = all_sessions{i};
-        [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_ica_session(curr_session.Filename, curr_session, icaFiles, num_elements);
+        [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_ica_session(curr_session.Filename, curr_session, icaFiles, window_size,Fs);
         curr_session.PE_MI = pe_mi;
         curr_session.PE_MI_Spectrum = pe_mi_spectrum;
         curr_session.PE_MI_Famp = pe_mi_famp;
@@ -44,100 +46,104 @@ end
 
 %% Reshaping Data for PCA and Classification
 
-offline_mi_sessions = {};
-online_mi_sessions = {};
-
-[~, num_mi_sessions] = size(MI_sessions);
-for i=1:num_mi_sessions
-    curr_session = MI_sessions{i};
-    if(convertCharsToStrings(MI_sessions{i}.Online) == "Online")
-        temp_session  = reshape_sessions(curr_session, num_frequencies, num_channels);
-        online_mi_sessions{end+1} = temp_session; % 10,(num_frequencies*num_channels)
-    else
-        temp_session  = reshape_sessions(curr_session, num_frequencies, num_channels);
-        offline_mi_sessions{end+1} = temp_session;
-    end 
-end
-
-% Concatenate all sessions
-[~, num_online_sessions] = size(online_mi_sessions);
-[~, num_offline_sessions] = size(offline_mi_sessions);
-
-total_online_mi_famp= [];
-total_online_mi_tags = []; % becomes 120x1 without transpose with vertcat
-total_online_rest_famp = [];
-total_online_rest_tags = [];
-
-total_offline_mi_famp= [];
-total_offline_mi_tags = []; % becomes 120x1 without transpose with vertcat
-total_offline_rest_famp = [];
-total_offline_rest_tags = [];
- 
-% First cat offline 
-for i=1:num_offline_sessions
-    total_offline_mi_famp =  vertcat(total_offline_mi_famp,offline_mi_sessions{i}.PE_MI_Famp);
-    total_offline_mi_tags = vertcat(total_offline_mi_tags, cell2mat(offline_mi_sessions{i}.MI_Tags)'); 
-
-    total_offline_rest_famp = vertcat(total_offline_rest_famp, offline_mi_sessions{i}.PE_Rest_Famp);
-    total_offline_rest_tags = vertcat(total_offline_rest_tags, cell2mat(offline_mi_sessions{i}.Rest_Tags)');
-end
-
-total_offline_sessions = vertcat(total_offline_mi_famp, total_offline_rest_famp); % Gives 80x320000;
-total_offline_tags = vertcat(total_offline_mi_tags, total_offline_rest_tags); % Gives 80x1;
-
-% Then cat online
-for i=1:num_online_sessions
-    total_online_mi_famp = vertcat(total_online_mi_famp,online_mi_sessions{i}.PE_MI_Famp);
-    total_online_mi_tags = vertcat(total_online_mi_tags, cell2mat(online_mi_sessions{i}.MI_Tags)');
-
-    total_online_rest_famp = vertcat(total_online_rest_famp, online_mi_sessions{i}.PE_Rest_Famp);
-    total_online_rest_tags = vertcat(total_online_rest_tags, cell2mat(online_mi_sessions{i}.Rest_Tags)');
-end
-
-total_online_sessions = vertcat(total_online_mi_famp, total_online_rest_famp); % Gives 160x320000;
-total_online_tags = vertcat(total_online_mi_tags, total_online_rest_tags); % Gives 160x1;
-% Testing only offline sessions
-% total_sessions = total_offline_sessions; % Should give 240x320000;
-% total_tags = total_offline_tags; % Should give 240x1;
-% Testing only online sessions
-% total_sessions = total_online_sessions; % Should give 240x320000;
-% total_tags = total_online_tags; % Should give 240x1;
-
-total_sessions = vertcat(total_offline_sessions, total_online_sessions); % Should give 240x320000;
-total_tags = vertcat(total_offline_tags, total_online_tags); % Should give 240x1;
-
-% total_sessions = total_sessions'; % Need to do this for PCA
+% offline_mi_sessions = {};
+% online_mi_sessions = {};
+% 
+% [~, num_mi_sessions] = size(MI_sessions);
+% for i=1:num_mi_sessions
+%     curr_session = MI_sessions{i};
+%     if(convertCharsToStrings(MI_sessions{i}.Online) == "Online")
+%         temp_session  = reshape_sessions(curr_session, num_frequencies, num_channels);
+%         online_mi_sessions{end+1} = temp_session; % 10,(num_frequencies*num_channels)
+%     else
+%         temp_session  = reshape_sessions(curr_session, num_frequencies, num_channels);
+%         offline_mi_sessions{end+1} = temp_session;
+%     end 
+% end
+% 
+% % Concatenate all sessions
+% [~, num_online_sessions] = size(online_mi_sessions);
+% [~, num_offline_sessions] = size(offline_mi_sessions);
+% 
+% total_online_mi_famp= [];
+% total_online_mi_tags = []; % becomes 120x1 without transpose with vertcat
+% total_online_rest_famp = [];
+% total_online_rest_tags = [];
+% 
+% total_offline_mi_famp= [];
+% total_offline_mi_tags = []; % becomes 120x1 without transpose with vertcat
+% total_offline_rest_famp = [];
+% total_offline_rest_tags = [];
+% 
+% % First cat offline 
+% for i=1:num_offline_sessions
+%     total_offline_mi_famp =  vertcat(total_offline_mi_famp,offline_mi_sessions{i}.PE_MI_Famp);
+%     total_offline_mi_tags = vertcat(total_offline_mi_tags, cell2mat(offline_mi_sessions{i}.MI_Tags)'); 
+% 
+%     total_offline_rest_famp = vertcat(total_offline_rest_famp, offline_mi_sessions{i}.PE_Rest_Famp);
+%     total_offline_rest_tags = vertcat(total_offline_rest_tags, cell2mat(offline_mi_sessions{i}.Rest_Tags)');
+% end
+% 
+% total_offline_sessions = vertcat(total_offline_mi_famp, total_offline_rest_famp); % Gives 80x320000;
+% total_offline_tags = vertcat(total_offline_mi_tags, total_offline_rest_tags); % Gives 80x1;
+% 
+% % Then cat online
+% for i=1:num_online_sessions
+%     total_online_mi_famp = vertcat(total_online_mi_famp,online_mi_sessions{i}.PE_MI_Famp);
+%     total_online_mi_tags = vertcat(total_online_mi_tags, cell2mat(online_mi_sessions{i}.MI_Tags)');
+% 
+%     total_online_rest_famp = vertcat(total_online_rest_famp, online_mi_sessions{i}.PE_Rest_Famp);
+%     total_online_rest_tags = vertcat(total_online_rest_tags, cell2mat(online_mi_sessions{i}.Rest_Tags)');
+% end
+% 
+% total_online_sessions = vertcat(total_online_mi_famp, total_online_rest_famp); % Gives 160x320000;
+% total_online_tags = vertcat(total_online_mi_tags, total_online_rest_tags); % Gives 160x1;
+% % Testing only offline sessions
+% % total_sessions = total_offline_sessions; % Should give 240x320000;
+% % total_tags = total_offline_tags; % Should give 240x1;
+% % Testing only online sessions
+% % total_sessions = total_online_sessions; % Should give 240x320000;
+% % total_tags = total_online_tags; % Should give 240x1;
+% 
+% total_sessions = vertcat(total_offline_sessions, total_online_sessions); % Should give 240x320000;
+% total_tags = vertcat(total_offline_tags, total_online_tags); % Should give 240x1;
+% 
+% % total_sessions = total_sessions'; % Need to do this for PCA
 
 %% Extra Functions
 
 % Preprocess Each Session and Return, 
-function [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_ica_session(curr_session_file, curr_session, ica_files, num_elements)
+function [pe_rest, pe_rest_spectrum, pe_rest_famp, rest_tags, pe_mi, pe_mi_spectrum, pe_mi_famp, mi_tags] = preprocess_ica_session(curr_session_file, curr_session, ica_files, window_size,Fs)
 
     [s,h] = sload(curr_session_file);
 
-    curr_ica_file = find_ica_file(ica_files, {curr_session.Session, curr_session.Repetition, curr_session.Online});
+    curr_ica_file = find_ica_file(ica_files, {curr_session.Session, curr_session.Repetition, curr_session.Online, curr_session.Subject});
     EEG = pop_loadset('filename', curr_ica_file);
     
     % Override s with new thing
     s = EEG.data';
 
-    [restMatrix,rest_tags,miMatrix,mi_tags] = crop_sort_signals(s,h, num_elements);
+    [pe_rest,rest_tags,pe_mi,mi_tags,pe_rest_spectrum,pe_rest_famp,pe_mi_spectrum,pe_mi_famp] = crop_sort_signals(s,h, window_size,Fs);
 
-    [~, num_rest_trials] = size(restMatrix);
-    [~, num_mi_trials] = size(miMatrix);
-    pe_rest = {};
-    pe_rest_spectrum = {};
-    pe_rest_famp = {};
-   
-    pe_mi = {};
-    pe_mi_spectrum = {};
-    pe_mi_famp = {};
-    for i=1:num_rest_trials
-        [pe_rest{i},pe_rest_spectrum{i},pe_rest_famp{i}] = preprocess_trial(restMatrix{i});
-    end
-    for i=1:num_mi_trials
-        [pe_mi{i},pe_mi_spectrum{i},pe_mi_famp{i}] = preprocess_trial(miMatrix{i});
-    end 
+    % [num_rest_trials, num_rest_windows] = size(restMatrix);
+    % [num_mi_trials, num_mi_windows] = size(miMatrix);
+    % pe_rest = {};
+    % pe_rest_spectrum = {};
+    % pe_rest_famp = {};
+    % 
+    % pe_mi = {};
+    % pe_mi_spectrum = {};
+    % pe_mi_famp = {};
+    % for i=1:num_rest_trials
+    %     for j = 1:num_rest_windows
+    %     [pe_rest{i,j},pe_rest_spectrum{i,j},pe_rest_famp{i,j}] = preprocess_trial(restMatrix{i,j});
+    %     end
+    % end
+    % for i=1:num_mi_trials
+    %     for j = 1:num_mi_windows
+    %         [pe_mi{i,j},pe_mi_spectrum{i,j},pe_mi_famp{i,j}] = preprocess_trial(miMatrix{i,j});
+    %     end
+    % end 
 end
 
 function [pe_data, pe_spectrum, pe_freq_amplitude] = preprocess_trial(curr_trial)
@@ -185,7 +191,7 @@ function [all_sessions] = create_classes(gdfFiles)
 
     for i=1:num_files
         file_chosen = gdfFiles{i};
-        file_split = strsplit(file_chosen,"/");
+        file_split = strsplit(file_chosen,"\");
         session_split = strsplit(file_split{end},"_");
         curr_session = session;
         curr_session.Subject = cell2mat(session_split(2));

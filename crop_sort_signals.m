@@ -1,4 +1,4 @@
-function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,target_h, num_elements)
+function [restMatrix,restTags,miMatrix,miTags,restFreq,restAmp,miFreq,miAmp] = crop_sort_signals(target_s,target_h, window_size,Fs)
 
     %Usage: After doing sload, use this function with the resulting data
     %(target_s) and headers (target_h)
@@ -24,12 +24,12 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
     
     %Initialize a cell array - cell mainly because of potentially uneven sizes
     %of each trial
-    restMatrix = cell(1,rest_event_num);
-    miMatrix = cell(1,mi_event_num);
+    restMatrix = {};
+    miMatrix = {};
     
     %Initialize counter for each event type
-    rest = 1;
-    mi = 1;
+    restTrial = 1;
+    miTrial = 1;
     restTags = [];
     miTags = [];
     
@@ -42,27 +42,76 @@ function [restMatrix,restTags,miMatrix,miTags] = crop_sort_signals(target_s,targ
             %Check the tag 2 indexes ahead, if it's 769 we have a right hand
             if(target_h.EVENT.TYP(n+2) == 769)
                 tempMatrix = target_s(target_h.EVENT.POS(n):target_h.EVENT.POS(n+4),:);
+                %restMatrix{rest} = padarray(tempMatrix, [num_elements - size(tempMatrix, 1),0], 0, 'post');     
+                
+                %Find how many windows can fit in a given stretch of data
+                numWindows = floor(2*size(tempMatrix,1)/window_size);
 
-                restMatrix{rest} = padarray(tempMatrix, [num_elements - size(tempMatrix, 1),0], 0, 'post');
+                for m = 1:numWindows
 
-                % restTags{rest} = target_h.EVENT.TYP(n+4);
-                temp =  target_h.EVENT.TYP(n+4);
+                    if(m < numWindows)
+                        tempWindow = tempMatrix((m-1)*window_size/2 + 1:(m-1)*window_size/2 + window_size,:);
+                        restMatrix{restTrial,m} = car(tempWindow);
+                    else
+                        tempWindow = tempMatrix((m-1)*window_size/2 + 1:end,:);
+                        restMatrix{restTrial,m} = car(padarray(tempWindow,[window_size - size(tempWindow,1),0], 0, 'post'));
+                    end
 
-                restTags{rest} = floor(temp/10); % Retrieves type regardless of pass/fail for online
-                rest = rest+1;
+                    % restTags{rest} = target_h.EVENT.TYP(n+4);
+                    temp =  target_h.EVENT.TYP(n+4);
+    
+                    restTags{m} = floor(temp/10); % Retrieves type regardless of pass/fail for online
+                    [restFreq{restTrial,m}, restAmp{restTrial,m}] = fft_with_shift(restMatrix{restTrial,m},Fs,1);
+
+                end
+            restTrial = restTrial + 1;    
             %Or if it's 770 we have a left hand
             elseif(target_h.EVENT.TYP(n+2) == 770)
                 tempMatrix = target_s(target_h.EVENT.POS(n):target_h.EVENT.POS(n+4),:);
-                miMatrix{mi} = padarray(tempMatrix, [num_elements - size(tempMatrix, 1),0], 0, 'post');
+                %miMatrix{mi} = padarray(tempMatrix, [num_elements - size(tempMatrix, 1),0], 0, 'post');
 
-                % miTags{mi} = target_h.EVENT.TYP(n+4);
-                temp = target_h.EVENT.TYP(n+4);
-                miTags{mi} = floor(temp/10);
-                mi = mi+1; 
+                %Find how many windows can fit in a given stretch of data
+                numWindows = floor(2*size(tempMatrix,1)/window_size);
+
+                for m = 1:numWindows
+
+                    if(m < numWindows)
+                        tempWindow = tempMatrix((m-1)*window_size/2 + 1:(m-1)*window_size/2 + window_size,:);
+                        miMatrix{miTrial,m} = car(tempWindow);
+                    else
+                        tempWindow = tempMatrix((m-1)*window_size/2 + 1:end,:);
+                        miMatrix{miTrial,m} = car(padarray(tempWindow,[window_size - size(tempWindow,1),0], 0, 'post'));
+                    end
+
+                    [miFreq{miTrial,m}, miAmp{miTrial,m}] = fft_with_shift(miMatrix{miTrial,m},Fs,1);
+
+                    % miTags{mi} = target_h.EVENT.TYP(n+4);
+                    temp = target_h.EVENT.TYP(n+4);
+                    miTags{m} = floor(temp/10);
+
+                end
+
+                miTrial = miTrial + 1;
+
+
             end
     
         end
     
     end
 
+end
+
+function [freqs, fft_shifted] = fft_with_shift(signal, sample_rate, axis)
+    [num_samples, N] = size(signal);
+    fft_shifted = fftshift(fft(signal), axis);
+    dt = 1/sample_rate; 
+    df = 1/dt/(length(signal)-1); 
+    freqs = -1/dt/2:df:1/dt/2; 
+end
+
+% Spatial Filtering for EEG
+function [filtered_eeg] = car(eeg)
+    average_signal = mean(eeg, 2);
+    filtered_eeg = eeg - average_signal;  % Subtract average from each element
 end
