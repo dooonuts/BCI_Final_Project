@@ -139,6 +139,7 @@ mlp_model = fitcnet(training_data,training_labels,'LayerSizes', [5 10]);
 mlp_pred = predict(mlp_model,prediction_data);
 plotConfusionMatrix(prediction_labels, mlp_pred, true);
 
+
 %% TODO LIST
 % Create Model and Test
 % Linear Discriminant Analysis/Linear Regression

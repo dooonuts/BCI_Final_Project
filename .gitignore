@@ -7,3 +7,4 @@ EEGLAB_INPUT/
 *.mat
 *.asv
 *.gdf
+*.ced
