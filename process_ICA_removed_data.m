@@ -15,13 +15,14 @@ icaFiles = icaFiles(:);
 % data = EEG.data';
 
 %% 
-curr_subject = 108; % 107 needs 9000, 108 and 109 can use 8000
+curr_subject = 107; % 107 needs 9000, 108 and 109 can use 8000
 %num_elements = 10000;
 window_size = 256; 
 num_trials = 10;
 num_channels = 32;
 Fs = 256;
-num_bands = 128;
+num_bands = 128; %Num bands to make, not to actually extract
+num_used_features = 100; %This is the num bands to use
 
 all_sessions = create_classes(gdfFiles);
 % Filtering Sessions
@@ -76,25 +77,27 @@ end
 %Find Fisher Scores across offline sessions
 offReshapedMIFamps = offReshapedMIFamps(~cellfun(@isempty,offReshapedMIFamps));
 offReshapedRestFamps = offReshapedRestFamps(~cellfun(@isempty,offReshapedRestFamps));
-[bands,offFullFisher] = fisherScores(pe_rest_spectrum{1,1},offReshapedRestFamps,offReshapedMIFamps,numBands);
+[bands,offFullFisher] = fisherScores(pe_rest_spectrum{1,1},offReshapedRestFamps,offReshapedMIFamps,num_bands);
 
 figure(99);
 offFullFisher = offFullFisher(:,end/2:end);
-imagesc(0:Fs/numBands:Fs/2,1:32,offFullFisher);
+bands = bands(:,end/2+1:end);
+imagesc(0:Fs/num_bands:Fs/2,1:32,offFullFisher);
 xlabel('Frequency (Hz)')
 ylabel('Channel');
 
 channames = ["Fp1"; "Fpz"; "Fp2"; "F7"; "F3"; "Fz"; "F4"; "F8"; "FC5"; "FC1"; "FC2"; "FC6";...
 "M1"; "T7"; "C3"; "Cz"; "C4"; "T8"; "M2"; "CP5"; "CP1"; "CP2"; "CP6"; "P7"; "P3"; "Pz"; "P4"; "P8";...
 "POz"; "O1"; "Oz"; "O2"];
+xlim([0 45])
 yticks(1:32);
 yticklabels(channames);
 
 fontsize(gca,15,'points');
 title(sprintf('All Fisher Scores Across Subject %i',curr_subject));
-
+CB1 = colorbar;
+ylabel(CB1,'Fisher Score');
 load selectedChannels.mat
-
 
 figure(100);
 topoplot(offFullFisher(:,9),selectedChannels,'maplimits','maxmin','electrodes','labels');
@@ -110,32 +113,49 @@ fontsize(gca,15,'points');
 
 %Choose bands using the Fisher score
 %TO DO: PICK BANDS AND CHANNEL COMBINATIONS USING FISHER
+[test1, test2] = maxk(offFullFisher(:),num_used_features,1);
+[x,y] = ind2sub(size(offFullFisher),test2);
 
-usedBands = [69,70];
-bandIndices = [];
+trainingFeaturesRest = [];
+trainingFeaturesMI = [];
+trialCounter = 1;
+for sess = 1:4
 
-for n = 1:length(usedBands)
+    tempTrainingFeaturesRest = [];
+    tempTrainingFeaturesMI = [];
+    currSession = MI_sessions{sess};
+    for wind = 1:length(currSession.PE_MI_Famp(:))
+  
+        if(~isempty(abs(currSession.PE_MI_Famp{wind}))) 
+            for n = 1:length(x)
+                tempTrainingFeaturesRest(trialCounter,n) = currSession.PE_MI_Famp{wind}(x(n),y(n));
+                tempTrainingFeaturesMI(trialCounter,n) = currSession.PE_MI_Famp{wind}(x(n),y(n)); 
+            end
+            trialCounter = trialCounter + 1;
+        end
 
-    bandRanges = bands{usedBands(n)};
-    tempBandIndices = [find(pe_mi_spectrum{1,1} == bandRanges(1)) find(pe_mi_spectrum{1,1} == bandRanges(2))];
-    bandIndices = [bandIndices tempBandIndices(1):tempBandIndices(2)];
+    end
+
+    trainingFeaturesRest = vertcat(trainingFeaturesRest,tempTrainingFeaturesRest);
+    trainingFeaturesMI = vertcat(trainingFeaturesMI,tempTrainingFeaturesMI);
+
 end
 
-offlineMI_res = reshapeFrequencyWindows(offReshapedMIFamps);
-offlineRest_res = reshapeFrequencyWindows(offReshapedRestFamps);
-offlineMI_res = abs(offlineMI_res(bandIndices,1:32,:));
-offlineRest_res = abs(offlineRest_res(bandIndices,1:32,:));
-
-offlineMI_res = permute(offlineMI_res,[3,1,2]);
-offlineRest_res = permute(offlineRest_res,[3,1,2]);
-offlineMI_res = reshape(offlineMI_res, [size(offlineMI_res,1),size(offlineMI_res,2)*size(offlineMI_res,3)]);
-offlineRest_res = reshape(offlineRest_res, [size(offlineRest_res,1),size(offlineRest_res,2)*size(offlineRest_res,3)]);
+% offlineMI_res = reshapeFrequencyWindows(offReshapedMIFamps);
+% offlineRest_res = reshapeFrequencyWindows(offReshapedRestFamps);
+% offlineMI_res = abs(offlineMI_res(bandIndices,1:32,:));
+% offlineRest_res = abs(offlineRest_res(bandIndices,1:32,:));
+% 
+% offlineMI_res = permute(offlineMI_res,[3,1,2]);
+% offlineRest_res = permute(offlineRest_res,[3,1,2]);
+% offlineMI_res = reshape(offlineMI_res, [size(offlineMI_res,1),size(offlineMI_res,2)*size(offlineMI_res,3)]);
+% offlineRest_res = reshape(offlineRest_res, [size(offlineRest_res,1),size(offlineRest_res,2)*size(offlineRest_res,3)]);
 
 %Make labels
-labelArray = [zeros(size(offlineRest_res,1),1); ones(size(offlineMI_res,1),1)];
+labelArray = [zeros(size(trainingFeaturesRest,1),1); ones(size(trainingFeaturesMI,1),1)];
 
 %% Labeling Stuff
-full_training_data = [offlineMI_res;offlineRest_res];
+full_training_data = [abs(trainingFeaturesRest);abs(trainingFeaturesMI)];
 full_training_labels = labelArray;
 
 validation_indices = randperm(length(labelArray),100);
