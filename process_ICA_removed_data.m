@@ -15,13 +15,13 @@ icaFiles = icaFiles(:);
 % data = EEG.data';
 
 %% 
-curr_subject = 108; % 107 needs 9000, 108 and 109 can use 8000
+curr_subject = 109; % 107 needs 9000, 108 and 109 can use 8000
 %num_elements = 10000;
 window_size = 256; 
 num_trials = 10;
 num_channels = 32;
 Fs = 256;
-num_bands = 128;
+numBands = 128;
 
 all_sessions = create_classes(gdfFiles);
 % Filtering Sessions
@@ -80,10 +80,11 @@ offReshapedRestFamps = offReshapedRestFamps(~cellfun(@isempty,offReshapedRestFam
 
 figure(99);
 offFullFisher = offFullFisher(:,end/2:end);
+bands = bands(:,end/2:end);
 imagesc(0:Fs/numBands:Fs/2,1:32,offFullFisher);
 xlabel('Frequency (Hz)')
 ylabel('Channel');
-
+xlim([0 45]);
 channames = ["Fp1"; "Fpz"; "Fp2"; "F7"; "F3"; "Fz"; "F4"; "F8"; "FC5"; "FC1"; "FC2"; "FC6";...
 "M1"; "T7"; "C3"; "Cz"; "C4"; "T8"; "M2"; "CP5"; "CP1"; "CP2"; "CP6"; "P7"; "P3"; "Pz"; "P4"; "P8";...
 "POz"; "O1"; "Oz"; "O2"];
@@ -97,7 +98,7 @@ load selectedChannels.mat
 
 
 figure(100);
-topoplot(offFullFisher(:,9),selectedChannels,'maplimits','maxmin','electrodes','labels');
+topoplot(offFullFisher(:,6)+offFullFisher(:,7),selectedChannels,'maplimits','maxmin','electrodes','labels');
 title(sprintf('Best Fisher Score Channel of Subject %i',curr_subject));
 CB = colorbar;
 ylabel(CB,'Fisher Score');
@@ -111,25 +112,43 @@ fontsize(gca,15,'points');
 %Choose bands using the Fisher score
 %TO DO: PICK BANDS AND CHANNEL COMBINATIONS USING FISHER
 
-usedBands = [69,70];
+powerCalcBand = sum(offFullFisher,1);
+powerCalcChannel = sum(offFullFisher,2);
+
+[val1, ind1] = maxk(powerCalcBand,20);
+[val2, ind2] = maxk(powerCalcChannel,5);
+
+usedBands = sort(ind1); %usedBands = [6:15];
+usedChannels = sort(ind2);
 bandIndices = [];
-
-for n = 1:length(usedBands)
-
-    bandRanges = bands{usedBands(n)};
-    tempBandIndices = [find(pe_mi_spectrum{1,1} == bandRanges(1)) find(pe_mi_spectrum{1,1} == bandRanges(2))];
-    bandIndices = [bandIndices tempBandIndices(1):tempBandIndices(2)];
-end
 
 offlineMI_res = reshapeFrequencyWindows(offReshapedMIFamps);
 offlineRest_res = reshapeFrequencyWindows(offReshapedRestFamps);
-offlineMI_res = abs(offlineMI_res(bandIndices,1:32,:));
-offlineRest_res = abs(offlineRest_res(bandIndices,1:32,:));
+offlineMI_res = abs(offlineMI_res(usedBands,usedChannels,:));
+offlineRest_res = abs(offlineRest_res(usedBands,usedChannels,:));
 
 offlineMI_res = permute(offlineMI_res,[3,1,2]);
 offlineRest_res = permute(offlineRest_res,[3,1,2]);
 offlineMI_res = reshape(offlineMI_res, [size(offlineMI_res,1),size(offlineMI_res,2)*size(offlineMI_res,3)]);
 offlineRest_res = reshape(offlineRest_res, [size(offlineRest_res,1),size(offlineRest_res,2)*size(offlineRest_res,3)]);
+
+
+% for n = 1:length(usedBands)
+% 
+%     bandRanges = bands{usedBands(n)};
+%     tempBandIndices = [find(pe_mi_spectrum{1,1} == bandRanges(1)) find(pe_mi_spectrum{1,1} == bandRanges(2))];
+%     bandIndices = [bandIndices tempBandIndices(1):tempBandIndices(2)];
+% end
+
+% offlineMI_res = reshapeFrequencyWindows(offReshapedMIFamps);
+% offlineRest_res = reshapeFrequencyWindows(offReshapedRestFamps);
+% offlineMI_res = abs(offlineMI_res(bandIndices,1:32,:));
+% offlineRest_res = abs(offlineRest_res(bandIndices,1:32,:));
+% 
+% offlineMI_res = permute(offlineMI_res,[3,1,2]);
+% offlineRest_res = permute(offlineRest_res,[3,1,2]);
+% offlineMI_res = reshape(offlineMI_res, [size(offlineMI_res,1),size(offlineMI_res,2)*size(offlineMI_res,3)]);
+% offlineRest_res = reshape(offlineRest_res, [size(offlineRest_res,1),size(offlineRest_res,2)*size(offlineRest_res,3)]);
 
 %Make labels
 labelArray = [zeros(size(offlineRest_res,1),1); ones(size(offlineMI_res,1),1)];
@@ -207,18 +226,18 @@ for n = 1:length(sess)
 
         %Do rest here
         true_labels(trialCounter) = 0;
-        predict_labels(trialCounter,1) = classifyOnline(curr_Rest_Famp(trial,:),lda_model,bandIndices);
-        predict_labels(trialCounter,2) = classifyOnline(curr_Rest_Famp(trial,:),svm_model,bandIndices);
-        predict_labels(trialCounter,3) = classifyOnline(curr_Rest_Famp(trial,:),mlp_model,bandIndices);
-        predict_labels(trialCounter,4) = classifyOnline(curr_Rest_Famp(trial,:),logreg_model,bandIndices);
+        predict_labels(trialCounter,1) = classifyOnline(curr_Rest_Famp(trial,:),lda_model,usedBands,usedChannels);
+        predict_labels(trialCounter,2) = classifyOnline(curr_Rest_Famp(trial,:),svm_model,usedBands,usedChannels);
+        predict_labels(trialCounter,3) = classifyOnline(curr_Rest_Famp(trial,:),mlp_model,usedBands,usedChannels);
+        predict_labels(trialCounter,4) = classifyOnline(curr_Rest_Famp(trial,:),logreg_model,usedBands,usedChannels);
 
         trialCounter = trialCounter + 1;
         %Do MI here
         true_labels(trialCounter) = 1;
-        predict_labels(trialCounter,1) = classifyOnline(curr_MI_Famp(trial,:),lda_model,bandIndices);
-        predict_labels(trialCounter,2) = classifyOnline(curr_MI_Famp(trial,:),svm_model,bandIndices);
-        predict_labels(trialCounter,3) = classifyOnline(curr_MI_Famp(trial,:),mlp_model,bandIndices);
-        predict_labels(trialCounter,4) = classifyOnline(curr_MI_Famp(trial,:),logreg_model,bandIndices);
+        predict_labels(trialCounter,1) = classifyOnline(curr_MI_Famp(trial,:),lda_model,usedBands,usedChannels);
+        predict_labels(trialCounter,2) = classifyOnline(curr_MI_Famp(trial,:),svm_model,usedBands,usedChannels);
+        predict_labels(trialCounter,3) = classifyOnline(curr_MI_Famp(trial,:),mlp_model,usedBands,usedChannels);
+        predict_labels(trialCounter,4) = classifyOnline(curr_MI_Famp(trial,:),logreg_model,usedBands,usedChannels);
         
         trialCounter = trialCounter + 1;
     end
@@ -241,7 +260,7 @@ title('SVM Testing Confusion Matrix');
 figure(8);
 disp("MLP: ")
 [accMLPTest, precMLPTest, recMLPTest] = plotConfusionMatrix(true_labels, predict_labels(:,3), true);
-title('LDA Testing Confusion Matrix');
+title('MLP Testing Confusion Matrix');
 
 
 
@@ -494,7 +513,7 @@ function [accuracy,precision,recall] = plotConfusionMatrix(actual, predicted, pl
     % disp("recall: " + num2str(recall));
 end
 
-function prediction = classifyOnline(trial,model,bandIndices)
+function prediction = classifyOnline(trial,model,bandIndices,channelIndices)
 
     %Define thresholds
     miThreshold = 0;
@@ -507,7 +526,7 @@ function prediction = classifyOnline(trial,model,bandIndices)
         
         if(~isempty(trial{n}))
             tempTrial = trial{n};
-            tempTrial = tempTrial(bandIndices,1:32);
+            tempTrial = tempTrial(bandIndices,channelIndices);
             tempTrial = reshape(tempTrial',[1,size(tempTrial,1)*size(tempTrial,2)]);
             pred = predict(model,abs(tempTrial));
         
